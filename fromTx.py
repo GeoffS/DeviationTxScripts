@@ -10,6 +10,22 @@ def checksumFile(fname):
     with open(fname, 'r') as file:
         return checksum(file.read())
 
+def copyFileWithoutTrailingNulls(contents, dstDir, outputFileName):
+    firstNullPos = contents.find('\0')
+    #print("First NULL Position = "+str(firstNullPos))
+
+    for char in contents[firstNullPos:]:
+        if(char != '\0'):
+            print("ERROR: Found non-NULL character after the first-NULL-position.")
+            return False
+
+    outputFullPath = os.path.join(dstDir, outputFileName)
+    with open(outputFullPath, "w") as fOut:
+        fOut.write(contents[0:firstNullPos])
+
+#======================================================================
+# Main script body:
+
 if len(sys.argv) != 3:
     print("Two arguments are required:")
     print("   "+sys.argv[0]+" <transmitter drive letter> <destination directory>")
@@ -20,32 +36,64 @@ dstDir = sys.argv[2]
 
 txDrive = txDrive[0]+":"
 
-print("Copying '"+txDrive+"' -> '"+dstDir+"'")
+print("Copying Files From '"+txDrive+"' to '"+dstDir+"'\n")
 
 txModelsDir = os.path.join(txDrive, "models")
 
-defaultModelName = os.path.join(txModelsDir, "default.ini")
+defaultFilename = "default.ini"
+
+defaultModelName = os.path.join(txModelsDir, defaultFilename)
 defaultFileCkSum = 0
 if os.path.exists(defaultModelName):
-    defaultFileCkSum = checksumFile(defaultModelName)
-print("default.ini checksum = "+str(defaultFileCkSum))
+    with open(defaultModelName, 'r') as fIn:
+        defaultContents = fIn.read()
+        print("Copying File '"+defaultFilename+"'")
+        with open(os.path.join(dstDir, defaultFilename), "w") as fOut:
+            fOut.write(defaultContents)
+        defaultFileCkSum = checksum(defaultContents)
+#print("default.ini checksum = "+str(defaultFileCkSum))
 
-#f=open("guru99.txt", "r")
 for fName in os.listdir(txModelsDir):
-    print(fName)
+    #print(fName)
     fullPath = os.path.join(txModelsDir, fName)
     if fName.startswith("model") & fName.endswith(".ini"):
-        modelNumStr = (fName[5:])[:-4]
-        #print("   "+modelNumStr)
-
-        if(checksumFile(fullPath) == defaultFileCkSum):
-            print("   Identical to default file.")
-            continue
+        baseName = fName[:-4]
+        modelNum = int((fName[5:])[:-4])
 
         with open(fullPath, 'r') as f:
-            lines = f.readlines()
-            if lines[0].startswith("name="):
-                modelName = (lines[0][5:])[:-1]
+            contents = f.read()
+
+            if(checksum(contents) == defaultFileCkSum):
+                #print("   Identical to default file. No processing.")
+                continue
+
+            outputFileName = baseName
+
+            if contents.startswith("name="):
+                nlPos = contents.find("\n", 5, 100)
+                modelName = contents[5:nlPos]
+                #print("Model name = '"+modelName+"'")
+                outputFileName = baseName+"_"+modelName
             else:
-                modelName = fName
                 print("   WARNING: no 'name=' first line in '"+fName+"'")
+
+            outputFileName += ".ini"
+            print("Copying File '"+fName+"' -> '"+outputFileName+"'")
+
+            copyFileWithoutTrailingNulls(contents, dstDir, outputFileName)
+            # firstNullPos = contents.find('\0')
+            # #print("First NULL Position = "+str(firstNullPos))
+            #
+            # continueProcessing = True
+            # for char in contents[firstNullPos:]:
+            #     if(char != '\0'):
+            #         print("ERROR: Found non-NULL character after the first-NULL-position.")
+            #         continueProcessing = False
+            #         break
+            #
+            # if continueProcessing:
+            #     outputFullPath = os.path.join(dstDir, outputFileName)
+            #     with open(outputFullPath, "w") as fOut:
+            #         fOut.write(contents[0:firstNullPos])
+
+print("\nDone!")
